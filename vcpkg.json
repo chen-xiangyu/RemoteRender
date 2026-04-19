@@ -1,0 +1,8 @@
+{
+  "dependencies": [
+    "ffmpeg",
+    "gtest",
+    "libdatachannel",
+    "qt5-base"
+  ]
+}
