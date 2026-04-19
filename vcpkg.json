@@ -2,7 +2,13 @@
   "dependencies": [
     "ffmpeg",
     "gtest",
-    "libdatachannel",
+    {
+      "name": "libdatachannel",
+      "features": [
+        "srtp",
+        "ws"
+      ]
+    },
     "qt5-base"
   ]
 }

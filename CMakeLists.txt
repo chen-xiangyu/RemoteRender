@@ -24,6 +24,7 @@ set(COMMON_SRC_FILES
     src/data_channel_session.cpp
     src/input_command.cpp
     src/tcp_signaling_channel.cpp
+    src/webrtc_video_session.cpp
 )
 
 set(COMMON_HEADER_FILES
@@ -31,6 +32,7 @@ set(COMMON_HEADER_FILES
     src/data_channel_session.h
     src/input_command.h
     src/tcp_signaling_channel.h
+    src/webrtc_video_session.h
 )
 
 add_library(datatransfer_common STATIC
@@ -67,10 +69,8 @@ target_link_libraries(lan_datachannel_client
 )
 
 add_executable(video_stream_server
-    src/ffmpeg_video_reader.cpp
-    src/ffmpeg_video_reader.h
-    src/video_frame_protocol.cpp
-    src/video_frame_protocol.h
+    src/ffmpeg_h264_file_source.cpp
+    src/ffmpeg_h264_file_source.h
     src/video_stream_server_main.cpp
 )
 
@@ -79,20 +79,25 @@ target_link_directories(video_stream_server PRIVATE ${FFMPEG_LIBRARY_DIRS})
 
 target_link_libraries(video_stream_server
     PRIVATE
+        datatransfer_common
         ${FFMPEG_LIBRARIES}
         Qt5::Core
-        Qt5::Gui
         Qt5::Network
 )
 
 add_executable(qt_video_client
-    src/video_frame_protocol.cpp
-    src/video_frame_protocol.h
+    src/ffmpeg_h264_decoder.cpp
+    src/ffmpeg_h264_decoder.h
     src/qt_video_client_main.cpp
 )
 
+target_include_directories(qt_video_client PRIVATE ${FFMPEG_INCLUDE_DIRS})
+target_link_directories(qt_video_client PRIVATE ${FFMPEG_LIBRARY_DIRS})
+
 target_link_libraries(qt_video_client
     PRIVATE
+        datatransfer_common
+        ${FFMPEG_LIBRARIES}
         Qt5::Core
         Qt5::Gui
         Qt5::Widgets

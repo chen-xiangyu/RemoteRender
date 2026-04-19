@@ -1,29 +1,33 @@
-#include "video_frame_protocol.h"
+#include "ffmpeg_h264_decoder.h"
+#include "tcp_signaling_channel.h"
+#include "webrtc_video_session.h"
 
 #include <QApplication>
-#include <QImage>
 #include <QLabel>
+#include <QMetaObject>
 #include <QPixmap>
-#include <QTcpSocket>
 #include <QVBoxLayout>
 #include <QWidget>
 
+#include <exception>
 #include <iostream>
-#include <stdexcept>
+#include <memory>
+#include <string>
 
 namespace {
 
 class VideoClientWindow : public QWidget {
 public:
-    VideoClientWindow(const QString& host, quint16 port) {
-        setWindowTitle("Qt Video Client");
+    explicit VideoClientWindow(const std::string& host, int port)
+        : m_host(host), m_port(port) {
+        setWindowTitle("Qt WebRTC Video Client");
         resize(960, 600);
 
         auto* layout = new QVBoxLayout(this);
         m_statusLabel = new QLabel("Connecting...", this);
         m_statusLabel->setAlignment(Qt::AlignCenter);
 
-        m_videoLabel = new QLabel("Waiting for video stream", this);
+        m_videoLabel = new QLabel("Waiting for WebRTC video track", this);
         m_videoLabel->setAlignment(Qt::AlignCenter);
         m_videoLabel->setMinimumSize(640, 360);
         m_videoLabel->setStyleSheet("background-color: black; color: white;");
@@ -31,70 +35,49 @@ public:
         layout->addWidget(m_statusLabel);
         layout->addWidget(m_videoLabel, 1);
 
-        connect(&m_socket, &QTcpSocket::connected, this, [this]() {
-            m_statusLabel->setText("Connected");
+        m_decoder = std::make_unique<datatransfer::FfmpegH264Decoder>();
+        m_signaling = std::make_unique<datatransfer::TcpSignalingChannel>();
+        m_session = std::make_unique<datatransfer::WebRtcVideoSession>(false);
+
+        m_session->SetSignalSender([this](const std::string& line) {
+            m_signaling->SendLine(line);
         });
 
-        connect(&m_socket, &QTcpSocket::readyRead, this, [this]() {
-            m_buffer.append(m_socket.readAll());
-            ProcessBuffer();
+        m_session->SetVideoFrameReceiver([this](const std::vector<std::uint8_t>& frame, std::uint64_t timestampUs) {
+            QImage image;
+            if (!m_decoder->Decode(frame, image)) {
+                return;
+            }
+
+            QMetaObject::invokeMethod(
+                this,
+                [this, image = std::move(image), timestampUs]() mutable {
+                    const QPixmap pixmap = QPixmap::fromImage(image);
+                    m_videoLabel->setPixmap(
+                        pixmap.scaled(m_videoLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+                    m_statusLabel->setText(
+                        QString("Receiving WebRTC H.264 stream  ts=%1 us")
+                            .arg(static_cast<qulonglong>(timestampUs)));
+                },
+                Qt::QueuedConnection);
         });
 
-        connect(&m_socket, &QTcpSocket::disconnected, this, [this]() {
-            m_statusLabel->setText("Disconnected");
+        m_signaling->ConnectTo(host, port);
+        m_signaling->StartReceiveLoop([this](const std::string& line) {
+            m_session->HandleSignalLine(line);
         });
 
-        connect(
-            &m_socket,
-            QOverload<QAbstractSocket::SocketError>::of(&QTcpSocket::errorOccurred),
-            this,
-            [this](QAbstractSocket::SocketError) {
-                m_statusLabel->setText("Socket error: " + m_socket.errorString());
-            });
-
-        m_socket.connectToHost(host, port);
+        m_statusLabel->setText(
+            QString("Connected to signaling %1:%2, waiting for media").arg(QString::fromStdString(host)).arg(port));
     }
 
-private:
-    void ProcessBuffer() {
-        while (true) {
-            if (m_buffer.size() < datatransfer::kVideoFrameHeaderSize) {
-                return;
-            }
-
-            const auto header = datatransfer::TryParseVideoFrameHeader(m_buffer);
-            if (!header) {
-                return;
-            }
-
-            const int packetSize =
-                datatransfer::kVideoFrameHeaderSize + static_cast<int>(header->payloadSize);
-            if (m_buffer.size() < packetSize) {
-                return;
-            }
-
-            const QByteArray jpegBytes = m_buffer.mid(
-                datatransfer::kVideoFrameHeaderSize,
-                static_cast<int>(header->payloadSize));
-            m_buffer.remove(0, packetSize);
-
-            QImage image;
-            if (!image.loadFromData(jpegBytes, "JPG")) {
-                m_statusLabel->setText("Failed to decode JPEG frame");
-                continue;
-            }
-
-            const QPixmap pixmap = QPixmap::fromImage(image);
-            m_videoLabel->setPixmap(
-                pixmap.scaled(m_videoLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
-            m_statusLabel->setText(
-                QString("Frame %1  %2x%3")
-                    .arg(header->frameIndex)
-                    .arg(header->width)
-                    .arg(header->height));
+    ~VideoClientWindow() override {
+        if (m_signaling) {
+            m_signaling->Close();
         }
     }
 
+private:
     void resizeEvent(QResizeEvent* event) override {
         QWidget::resizeEvent(event);
         if (const QPixmap* pixmap = m_videoLabel->pixmap()) {
@@ -103,10 +86,13 @@ private:
         }
     }
 
-    QTcpSocket m_socket;
-    QByteArray m_buffer;
+    std::string m_host;
+    int m_port = 0;
     QLabel* m_statusLabel = nullptr;
     QLabel* m_videoLabel = nullptr;
+    std::unique_ptr<datatransfer::FfmpegH264Decoder> m_decoder;
+    std::unique_ptr<datatransfer::TcpSignalingChannel> m_signaling;
+    std::unique_ptr<datatransfer::WebRtcVideoSession> m_session;
 };
 
 } // namespace
@@ -114,8 +100,8 @@ private:
 int main(int argc, char* argv[]) {
     QApplication app(argc, argv);
 
-    const QString host = argc >= 2 ? QString::fromLocal8Bit(argv[1]) : QStringLiteral("127.0.0.1");
-    const quint16 port = argc >= 3 ? static_cast<quint16>(QString::fromLocal8Bit(argv[2]).toUShort()) : 10000;
+    const std::string host = argc >= 2 ? argv[1] : "127.0.0.1";
+    const int port = argc >= 3 ? std::stoi(argv[2]) : 10000;
 
     try {
         VideoClientWindow window(host, port);
