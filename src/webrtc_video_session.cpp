@@ -67,6 +67,26 @@ void WebRtcVideoSession::Start() {
     m_peerConnection->setLocalDescription();
 }
 
+void WebRtcVideoSession::Close() {
+    std::shared_ptr<rtc::Track> track;
+    std::shared_ptr<rtc::PeerConnection> peerConnection;
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        track = m_track;
+        peerConnection = m_peerConnection;
+        m_trackOpen = false;
+    }
+
+    if (track) {
+        track->close();
+    }
+    if (peerConnection) {
+        peerConnection->close();
+    }
+
+    m_openCondition.notify_all();
+}
+
 void WebRtcVideoSession::HandleSignalLine(const std::string& line) {
     const auto parts = Split(line, '|');
     if (parts.empty()) {

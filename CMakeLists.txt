@@ -116,6 +116,7 @@ include(GoogleTest)
 add_executable(datatransfer_unit_tests
     tests/data_channel_session_tests.cpp
     tests/input_command_tests.cpp
+    tests/webrtc_video_session_tests.cpp
 )
 
 target_link_libraries(datatransfer_unit_tests

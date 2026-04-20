@@ -30,6 +30,7 @@ public:
     void SetVideoFrameReceiver(std::function<void(const std::vector<std::uint8_t>&, std::uint64_t)> receiver);
 
     void Start();
+    void Close();
     void HandleSignalLine(const std::string& line);
     void WaitForTrackOpen() const;
     bool IsTrackOpen() const;
