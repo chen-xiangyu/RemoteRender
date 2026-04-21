@@ -85,6 +85,10 @@ bool FfmpegH264FileSource::ReadNextSample(
     return ReadPacketFromSource(annexBFrame, timestampUs);
 }
 
+std::uint64_t FfmpegH264FileSource::FrameIntervalUs() const {
+    return m_frameIntervalUs;
+}
+
 bool FfmpegH264FileSource::ReadPacketFromSource(
     std::vector<std::uint8_t>& annexBFrame,
     std::uint64_t& timestampUs) {

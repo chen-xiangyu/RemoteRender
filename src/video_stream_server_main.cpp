@@ -38,18 +38,21 @@ int main(int argc, char* argv[]) {
 
         std::vector<std::uint8_t> sample;
         std::uint64_t sampleTimestampUs = 0;
-        std::uint64_t previousTimestampUs = 0;
-        bool firstFrame = true;
+        auto streamStartTime = std::chrono::steady_clock::now();
+        std::uint64_t frameIndex = 0;
+        const auto frameIntervalUs = source.FrameIntervalUs();
 
         while (source.ReadNextSample(sample, sampleTimestampUs)) {
-            if (!firstFrame && sampleTimestampUs > previousTimestampUs) {
-                std::this_thread::sleep_for(
-                    std::chrono::microseconds(sampleTimestampUs - previousTimestampUs));
+            if (frameIndex == 0) {
+                streamStartTime = std::chrono::steady_clock::now();
+            } else {
+                const auto targetSendTime =
+                    streamStartTime + std::chrono::microseconds(frameIntervalUs * frameIndex);
+                std::this_thread::sleep_until(targetSendTime);
             }
-            firstFrame = false;
-            previousTimestampUs = sampleTimestampUs;
 
             session.SendVideoSample(sample, sampleTimestampUs);
+            ++frameIndex;
         }
 
         signaling.Close();

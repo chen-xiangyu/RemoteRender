@@ -19,6 +19,7 @@ public:
     FfmpegH264FileSource& operator=(const FfmpegH264FileSource&) = delete;
 
     bool ReadNextSample(std::vector<std::uint8_t>& annexBFrame, std::uint64_t& timestampUs);
+    std::uint64_t FrameIntervalUs() const;
 
 private:
     bool ReadPacketFromSource(std::vector<std::uint8_t>& annexBFrame, std::uint64_t& timestampUs);
