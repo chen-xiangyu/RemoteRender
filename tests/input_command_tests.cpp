@@ -86,6 +86,11 @@ TEST(InputCommandTests, InvalidMagicIsRejected) {
     EXPECT_THROW(DeserializeCommand(bytes), std::runtime_error);
 }
 
+TEST(InputCommandTests, CommandTooShortIsRejected) {
+    const std::vector<std::uint8_t> bytes(23U, 0U);
+    EXPECT_THROW(DeserializeCommand(bytes), std::runtime_error);
+}
+
 TEST(InputCommandTests, PayloadSizeMismatchIsRejected) {
     MouseWheelPayload payload;
     payload.deltaX = 1;
@@ -107,6 +112,14 @@ TEST(InputCommandTests, WrongPayloadTypeFailsSpecificDecoder) {
     EXPECT_THROW(DeserializeKeyPayload(command), std::runtime_error);
 }
 
+TEST(InputCommandTests, SpecificDecoderRejectsUnexpectedPayloadSize) {
+    InputCommand command;
+    command.type = InputCommandType::MouseMove;
+    command.payload = {1U, 2U, 3U};
+
+    EXPECT_THROW(DeserializeMouseMovePayload(command), std::runtime_error);
+}
+
 TEST(InputCommandTests, DisplayStringContainsKeyFields) {
     MouseWheelPayload payload;
     payload.deltaX = 0;
@@ -118,6 +131,20 @@ TEST(InputCommandTests, DisplayStringContainsKeyFields) {
     EXPECT_NE(text.find("seq=11"), std::string::npos);
     EXPECT_NE(text.find("MouseWheel"), std::string::npos);
     EXPECT_NE(text.find("dy=120"), std::string::npos);
+}
+
+TEST(InputCommandTests, DisplayStringFallsBackForUnknownCommandType) {
+    InputCommand command;
+    command.type = static_cast<InputCommandType>(99);
+    command.sequence = 5;
+    command.timestampUs = 10;
+    command.payload = {1U, 2U, 3U, 4U};
+
+    const auto text = ToDisplayString(command);
+
+    EXPECT_NE(text.find("seq=5"), std::string::npos);
+    EXPECT_NE(text.find("Unknown"), std::string::npos);
+    EXPECT_NE(text.find("payloadBytes=4"), std::string::npos);
 }
 
 } // namespace

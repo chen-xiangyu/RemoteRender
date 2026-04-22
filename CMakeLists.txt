@@ -116,7 +116,10 @@ include(GoogleTest)
 add_executable(datatransfer_unit_tests
     tests/data_channel_session_tests.cpp
     tests/input_command_tests.cpp
+    tests/video_frame_protocol_tests.cpp
     tests/webrtc_video_session_tests.cpp
+    src/video_frame_protocol.cpp
+    src/video_frame_protocol.h
 )
 
 target_link_libraries(datatransfer_unit_tests
@@ -124,6 +127,7 @@ target_link_libraries(datatransfer_unit_tests
         datatransfer_common
         GTest::gtest
         GTest::gtest_main
+        Qt5::Core
 )
 
 gtest_discover_tests(datatransfer_unit_tests)
